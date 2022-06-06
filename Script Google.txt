@@ -1,0 +1,507 @@
+var ss = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/16K1zSTIK7vO-RaO1Cgv7MehyAtKH_m4hGDarh6Q4ugc/edit#gid=0");
+var ssVisaoGeral = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/1tLsyX8HoKU7uUMnvUxQBCbL_3RXcXvr3aCJmi_odOCA/edit#gid=0");
+var sheet = ss.getSheetByName('Contagem');
+var sheetTratada = ss.getSheetByName('Estoque Atual Tratado');
+var sheetDivergencias = ss.getSheetByName('Divergencias');
+var sheetBancoItens = ss.getSheetByName('Itens');
+var sheetPedido = ss.getSheetByName('Pedido');
+var sheetVisaoGeralDivergencias = ssVisaoGeral.getSheetByName('SBS-0126');
+
+function doPost(e){
+//var action = 'finalizar';
+var action = e.parameter.action;
+  if(action == 'addItem')
+  {
+    return addItem(e);
+  }
+  if(action == 'addItemPedido')
+  {
+    return addItemPedido(e);
+  }
+  if(action == 'finalizar')
+  {
+    return finalizar();
+  }
+  if(action == 'finalizar-parcial')
+  {
+    return finalizarParcial();
+  }
+  if(action == 'limparPedido')
+  {
+    return limparPedido();
+  }
+  if(action == 'excluirLinha')
+  {
+    return excluirUltimoItem();
+  }
+}
+
+function doGet(e)
+{
+var action = e.parameter.action;
+  if(action == 'getItem')
+  {
+    return getItem(e);
+  }
+  if(action == 'getItemPedido')
+  {
+    return getItemPedido(e);
+  }
+}
+
+function addItem(e){
+
+var date = new Date();
+var codigoItem = e.parameter.itemCod;
+var descricaoItem = e.parameter.itemDesc;
+var qtdContada = e.parameter.itemQtd;
+
+sheet.appendRow([date, codigoItem, descricaoItem, qtdContada]);
+
+return ContentService.createTextOutput("Registrado").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function addItemPedido(e){
+
+var codigoItem = e.parameter.itemCod;
+var descricaoItem = e.parameter.itemDesc;
+var qtdContada = e.parameter.itemQtd;
+
+sheetPedido.appendRow([codigoItem, descricaoItem, qtdContada]);
+
+return ContentService.createTextOutput("Registrado").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function getItem(e){
+
+var records={};
+
+var rows = sheetTratada.getRange(1,1,sheetTratada.getLastRow(), sheetTratada.getLastColumn()).getValues();
+data = [];
+
+for (var r=0, l = rows.length; r < l; r++)
+{
+  var row = rows[r], 
+  record = {};
+  record['itemCodigo'] = row[0];
+  record['itemNome'] = row[1];
+  record['itemQtd'] = row[2];
+
+  data.push(record);
+}
+records.items = data;
+var result=JSON.stringify(records);
+return ContentService.createTextOutput(result).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getItemPedido(e){
+
+var records={};
+
+var rows = sheetBancoItens.getRange(1,1,sheetBancoItens.getLastRow(), sheetBancoItens.getLastColumn()).getValues();
+data = [];
+
+for (var r=0, l = rows.length; r < l; r++)
+{
+  var row = rows[r], 
+  record = {};
+  record['itemCodigo'] = row[0];
+  record['itemNome'] = row[1];
+  record['itemQtd'] = row[2];
+
+  data.push(record);
+}
+records.items = data;
+var result=JSON.stringify(records);
+return ContentService.createTextOutput(result).setMimeType(ContentService.MimeType.JSON);
+}
+
+function finalizar(){
+
+var limparDivergencias = sheetDivergencias.getRange(2,1, 1000, 6);
+limparDivergencias.clearContent();
+
+var planilhaContagem = sheet.getRange(2,1,sheet.getLastRow(), sheet.getLastColumn()).getValues();
+var planilhaContagemTeste = sheet.getRange(2,1,sheet.getLastRow(), sheet.getLastColumn()).getValues();
+
+if(planilhaContagemTeste.length <= 1)
+{
+  return ContentService.createTextOutput("Nenhum item foi registrado na contagem").setMimeType(ContentService.MimeType.TEXT);
+}
+
+var planilhaEstoqueAtual = sheetTratada.getRange(1,1,sheetTratada.getLastRow(), sheetTratada.getLastColumn()).getValues();
+var intervalo = sheetDivergencias.getRange(1,6, 1000, 6);
+    intervalo.setNumberFormat("@STRING@");
+
+for(var i = 0; i < planilhaContagem.length; i++)
+  {
+    var linha = planilhaContagem[i];
+    var busca = linha[1];
+    var qtdBusca = linha[3];
+
+    var parametro = 0;
+
+    for(var j = 0; j < planilhaEstoqueAtual.length; j++)
+    {
+      var linhaPesquisada = planilhaEstoqueAtual[j];
+      if(linhaPesquisada[0] == 'CODIGO' || linhaPesquisada[0] == '')
+      {
+        continue;
+      }
+      if(busca == linhaPesquisada[0] && busca != '')
+      {
+        parametro = 1;
+        if(qtdBusca != linhaPesquisada[2])
+        {
+          var date = linha[0];
+          var codigoItem = linha[1];
+          var descricaoItem = linha[2];
+          var qtdSistema = linhaPesquisada[2];
+          var qtdContada = linha[3];   
+          var divergencia = qtdContada - qtdSistema;
+
+          var divString = divergencia.toString();
+          if(divergencia > 0)
+          {
+            divString = "'+" + divergencia.toString();
+          }
+
+          sheetDivergencias.appendRow([date, codigoItem, descricaoItem, qtdSistema, qtdContada, divString]);
+        }
+      }
+    }
+    if(parametro == 0) //significa que não achou este item no estoque. Há um divergencia. Precisa ser entrado no estoque este item.
+    {
+          if(qtdBusca != 0)
+          {
+            var date = linha[0];
+          var codigoItem = linha[1];
+          var descricaoItem = linha[2];
+          var qtdSistema = 0;
+          var qtdContada = linha[3];   
+          var divergencia = qtdContada - qtdSistema;
+          var divString = divergencia.toString();
+          if(divergencia > 0)
+          {
+            divString = "'+" + divergencia.toString();
+          }
+          sheetDivergencias.appendRow([date, codigoItem, descricaoItem, qtdSistema, qtdContada, divString]);
+          }
+    }
+  }
+
+for(var j = 0; j < planilhaEstoqueAtual.length; j++)
+    {
+      var linhaPesquisada = planilhaEstoqueAtual[j];
+      var busca = linhaPesquisada[0];
+      var qtdBusca = linhaPesquisada[2]; 
+
+      var parametro = 0;
+
+      if(busca == 'CODIGO' || busca == '' || busca == 'Total da Secao Saldos em Estoque')
+      {
+        continue;
+      }
+      for(var i = 0; i < planilhaContagem.length; i++)
+      {
+        var linha = planilhaContagem[i];
+        if(busca == linha[1] && busca != '')
+        {
+          parametro = 1;
+          if(qtdBusca != linha[3])
+          {
+            var planilhaDivergenciaAtual = sheetDivergencias.getRange(2,1,sheetDivergencias.getLastRow(), sheetDivergencias.getLastColumn()).getValues();
+            var parametroJaExiste = 0;
+            for(var k = 0; k < planilhaDivergenciaAtual.length; k++)
+            {
+              var divergenciaAtual = planilhaDivergenciaAtual[k];
+              if(busca == divergenciaAtual[1])
+              {
+                parametroJaExiste = 1;
+              }
+            }
+            if(parametroJaExiste == 0)
+            {
+              var date = new Date();
+              var codigoItem = linhaPesquisada[0];
+              var descricaoItem = linhaPesquisada[1];
+              var qtdSistema = linhaPesquisada[2];
+              var qtdContada = linha[3];   
+              var divergencia = qtdContada - qtdSistema;
+              var divString = divergencia.toString();
+              if(divergencia > 0)
+              {
+                divString = "'+" + divergencia.toString();
+              }
+
+              sheetDivergencias.appendRow([date, codigoItem, descricaoItem, qtdSistema, qtdContada, divString]);
+            }
+          }
+        }
+      }
+      if(parametro == 0) //significa que não achou este item no estoque. Há um divergencia. Precisa ser baixado do estoque.
+      {
+            var date = new Date();
+            var codigoItem = linhaPesquisada[0];
+            var descricaoItem = linhaPesquisada[1];
+            var qtdSistema = linhaPesquisada[2];
+            var qtdContada = 0;   
+            var divergencia = qtdContada - qtdSistema;
+            var divString = divergencia.toString();
+            if(divergencia > 0)
+            {
+              divString = "'+" + divergencia.toString();
+            }
+            sheetDivergencias.appendRow([date, codigoItem, descricaoItem, qtdSistema, qtdContada, divString]);
+      }  
+    }
+
+    var intervaloBKP = sheet.getRange(1,1,sheet.getLastRow(), sheet.getLastColumn());
+    var destinoPreTratamento = ss.getSheetByName("Bkp Ultima Contagem");
+    var limparBKPAnterior = destinoPreTratamento.getRange(2,1, 1000, 6);
+    limparBKPAnterior.clearContent();
+    destinoPreTratamento.clearContents();
+    var dadosPlanilha = sheet.getRange(1,1,sheet.getLastRow(), sheet.getLastColumn()).activate();
+    var source_range = sheet.getActiveRange();
+    var last_row = destinoPreTratamento.getLastRow();
+    var values = source_range.getValues();
+    destinoPreTratamento.getRange(last_row + 1, 1, values.length, values[0].length).setValues(values);           
+    
+    var limpar = sheet.getRange(2,1, 1000, 6);
+    limpar.clearContent();
+
+    var dadosEnviarVisaoGeral = sheetDivergencias.getRange(2,1,sheetDivergencias.getLastRow(), sheetDivergencias.getLastColumn()).activate();
+    var souce_rng = sheetDivergencias.getActiveRange();
+    var ultimaLinha = sheetVisaoGeralDivergencias.getLastRow();
+    var valores = souce_rng.getValues();
+    sheetVisaoGeralDivergencias.getRange(ultimaLinha + 1, 1, valores.length,valores[0].length).setValues(valores);
+
+    carregaInfos("t");
+
+    return ContentService.createTextOutput("Processamento Finalizado").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function finalizarParcial(){
+
+var limparDivergencias = sheetDivergencias.getRange(2,1, 1000, 6);
+limparDivergencias.clearContent();
+
+var planilhaContagem = sheet.getRange(2,1,sheet.getLastRow(), sheet.getLastColumn()).getValues();
+var planilhaContagemTeste = sheet.getRange(2,1,sheet.getLastRow(), sheet.getLastColumn()).getValues();
+
+if(planilhaContagemTeste.length <= 1)
+{
+  return ContentService.createTextOutput("Nenhum item foi registrado na contagem").setMimeType(ContentService.MimeType.TEXT);
+}
+
+var planilhaEstoqueAtual = sheetTratada.getRange(1,1,sheetTratada.getLastRow(), sheetTratada.getLastColumn()).getValues();
+var intervalo = sheetDivergencias.getRange(1,6, 1000, 6);
+    intervalo.setNumberFormat("@STRING@");
+
+for(var i = 0; i < planilhaContagem.length; i++)
+  {
+    var linha = planilhaContagem[i];
+    var busca = linha[1];
+    var qtdBusca = linha[3];
+
+    var parametro = 0;
+
+    for(var j = 0; j < planilhaEstoqueAtual.length; j++)
+    {
+      var linhaPesquisada = planilhaEstoqueAtual[j];
+      if(linhaPesquisada[0] == 'CODIGO' || linhaPesquisada[0] == '')
+      {
+        continue;
+      }
+      if(busca == linhaPesquisada[0] && busca != '')
+      {
+        parametro = 1;
+        if(qtdBusca != linhaPesquisada[2])
+        {
+          var date = linha[0];
+          var codigoItem = linha[1];
+          var descricaoItem = linha[2];
+          var qtdSistema = linhaPesquisada[2];
+          var qtdContada = linha[3];   
+          var divergencia = qtdContada - qtdSistema;
+
+          var divString = divergencia.toString();
+          if(divergencia > 0)
+          {
+            divString = "'+" + divergencia.toString();
+          }
+
+          sheetDivergencias.appendRow([date, codigoItem, descricaoItem, qtdSistema, qtdContada, divString]);
+        }
+      }
+    }
+    if(parametro == 0) //significa que não achou este item no estoque. Há um divergencia. Precisa ser entrado no estoque este item.
+    {
+          if(qtdBusca != 0)
+          {
+            var date = linha[0];
+          var codigoItem = linha[1];
+          var descricaoItem = linha[2];
+          var qtdSistema = 0;
+          var qtdContada = linha[3];   
+          var divergencia = qtdContada - qtdSistema;
+          var divString = divergencia.toString();
+          if(divergencia > 0)
+          {
+            divString = "'+" + divergencia.toString();
+          }
+          sheetDivergencias.appendRow([date, codigoItem, descricaoItem, qtdSistema, qtdContada, divString]);
+          }
+    }
+  }
+
+    var intervaloBKP = sheet.getRange(1,1,sheet.getLastRow(), sheet.getLastColumn());
+    var destinoPreTratamento = ss.getSheetByName("Bkp Ultima Contagem");
+    var limparBKPAnterior = destinoPreTratamento.getRange(2,1, 1000, 6);
+    limparBKPAnterior.clearContent();
+    destinoPreTratamento.clearContents();
+    var dadosPlanilha = sheet.getRange(1,1,sheet.getLastRow(), sheet.getLastColumn()).activate();
+    var source_range = sheet.getActiveRange();
+    var last_row = destinoPreTratamento.getLastRow();
+    var values = source_range.getValues();
+    destinoPreTratamento.getRange(last_row + 1, 1, values.length, values[0].length).setValues(values);           
+    
+    var limpar = sheet.getRange(2,1, 1000, 6);
+    limpar.clearContent();
+
+    var dadosEnviarVisaoGeral = sheetDivergencias.getRange(2,1,sheetDivergencias.getLastRow(), sheetDivergencias.getLastColumn()).activate();
+    var souce_rng = sheetDivergencias.getActiveRange();
+    var ultimaLinha = sheetVisaoGeralDivergencias.getLastRow();
+    var valores = souce_rng.getValues();
+    sheetVisaoGeralDivergencias.getRange(ultimaLinha + 1, 1, valores.length,valores[0].length).setValues(valores);
+
+    carregaInfos("p");
+
+    return ContentService.createTextOutput("Processamento Finalizado").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function limparPedido()
+{
+  var intevaloLimpar = sheetPedido.getRange(2,1, sheetPedido.getLastRow(), sheetPedido.getLastColumn());
+  intevaloLimpar.clearContent();
+  return ContentService.createTextOutput("Limpeza de Planilha Executada").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function excluirUltimoItem()
+{
+  var linhaExcluir = sheet.getRange(sheet.getLastRow(),1,1, sheet.getLastColumn());
+  linhaExcluir.clearContent();
+  return ContentService.createTextOutput("Linha excluída!").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function carregaInfos(tipoContagem)
+{
+  var tipoContagemSalvar;
+  if(tipoContagem == 't')
+  {
+    tipoContagemSalvar = "TOTAL"
+  }
+  if(tipoContagem == 'p')
+  {
+    tipoContagemSalvar = "PARCIAL"
+  }
+
+  var ss1 = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/1tLsyX8HoKU7uUMnvUxQBCbL_3RXcXvr3aCJmi_odOCA/edit#gid=0");
+  var sheetVisaoGeral = ss1.getSheetByName('Visao Geral');
+  var sheetFilial0126 = ss1.getSheetByName('SBS-0126');
+
+  var ss0126 = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/16K1zSTIK7vO-RaO1Cgv7MehyAtKH_m4hGDarh6Q4ugc/edit#gid=0");
+  var sheetTratada0126 = ss0126.getSheetByName('Estoque Atual Tratado');
+  var sheetDivergencias0126 = ss0126.getSheetByName('Divergencias');
+  var sheetBKPUltCont0126 = ss0126.getSheetByName('Bkp Ultima Contagem');
+
+  var linhasSheetTratada0126 = sheetTratada0126.getRange(1,1,sheetTratada0126.getLastRow(), sheetTratada0126.getLastColumn()).getValues();
+
+  var filial = 'SBS - 0126'
+  var contItensEstoque = 0;
+  for(var i = 0; i < linhasSheetTratada0126.length; i++)
+  {
+    var linhaAtual = linhasSheetTratada0126[i];
+    if(linhaAtual[0] == 'CODIGO' || linhaAtual[0] == '' || linhaAtual[0] == 'Total da Secao Saldos em Estoque')
+    {
+      continue;
+    }
+    else
+    {
+      contItensEstoque++;
+    }
+  }
+  var linhasSheetDivergencia0126 = sheetDivergencias0126.getRange(1,1,sheetDivergencias0126.getLastRow(), sheetDivergencias0126.getLastColumn()).getValues();
+  var contItensDivergencia = 0;
+  for(var j = 0; j < linhasSheetDivergencia0126.length; j++)
+  {
+    var linhaAtual = linhasSheetDivergencia0126[j];
+    if(linhaAtual[0] == 'Data' || linhaAtual[0] == '')
+    {
+      continue;
+    }
+    else
+    {
+      contItensDivergencia++;
+    }
+  }
+
+  var itensContadosBKP = sheetBKPUltCont0126.getRange(2,1,sheetBKPUltCont0126.getLastRow() - 1, sheetBKPUltCont0126.getLastColumn()).getValues();
+  var itensContados = itensContadosBKP.length;
+
+  var porcentagemDivergencia;
+  if(tipoContagem == 't')
+  {
+    porcentagemDivergencia = (contItensDivergencia * 100)/contItensEstoque; //porcentagem baseada no estoque total, confrontando itens contados e estoque total
+  }
+  if(tipoContagem == 'p')
+  {
+    porcentagemDivergencia = (contItensDivergencia * 100)/itensContados; //porcentagem baseada na contagem parcial, confrontando o contado com o divergente
+  }
+  
+  var pctDivString = porcentagemDivergencia.toFixed(2).toString() + '%'
+  var itensEmEstoque = contItensEstoque;
+  
+  var itensDivergentesBKP;
+  var itensDivergentes;
+  var verificacaoDados = sheetDivergencias0126.getLastRow();
+  if(verificacaoDados > 1) //significa que a planilha possui dados além de seu cabeçalho
+  {
+    itensDivergentesBKP = sheetDivergencias0126.getRange(2,1,sheetDivergencias0126.getLastRow() - 1, sheetDivergencias0126.getLastColumn()).getValues();
+    itensDivergentes = itensDivergentesBKP.length;
+  }
+  else{
+    itensDivergentes = 0;
+  }
+  
+  var dataUltimaContagemVetor = itensContadosBKP[0];
+  var dataUltimaContagem = dataUltimaContagemVetor[0];
+  var dataDate = new Date(dataUltimaContagem);
+  var dataDia = dataDate.getDate();
+  var dataMes = dataDate.getMonth();
+  var dataAno = dataDate.getFullYear();
+  var dataString = dataDia.toString() + '/' + dataMes.toString() + '/' + dataAno.toString();
+  var dataFinal = dataString;
+  var inicio = dataDate.getTime();
+  var ultRegistroContagemS = sheetBKPUltCont0126.getRange(sheetBKPUltCont0126.getLastRow(),1,1, sheetBKPUltCont0126.getLastColumn()).getValues();
+  var ultRegistroContagem = ultRegistroContagemS[0]
+  var dataUltimoRegistro = ultRegistroContagem[0];
+  var dataUltRegDate = new Date(dataUltimoRegistro);
+  var fim = dataUltRegDate.getTime();
+  var tempoDurCont = fim - inicio;
+
+  var result = Math.floor(tempoDurCont/(1000*60*60)) + ":" + Math.floor(tempoDurCont/(1000*60))%60 + ":" + Math.floor(tempoDurCont/1000)%60;
+
+  sheetVisaoGeral.appendRow([filial, tipoContagemSalvar, pctDivString, itensContados, itensEmEstoque, itensDivergentes, dataString, result]);
+}
+/*function downloadSheetAsPDF() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetId = ss.getActiveSheet().getSheetId();
+  var url = "https://docs.google.com/a/mydomain.org/spreadsheets/d/" + ss.getId() + "/export?exportFormat=pdf&gid=" + sheetId + "&access_token=" + ScriptApp.getOAuthToken();
+  var str = '<input type="button" value="Download" onClick="location.href=\'' + url + '\'" >';
+  var html = HtmlService.createHtmlOutput(str);
+  SpreadsheetApp.getUi().showModalDialog(html, "sample");
+}*/
+
+
+

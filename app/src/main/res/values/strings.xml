@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">O Estoque</string>
+    <string name="link_sbs">https://script.google.com/macros/s/AKfycbxJO-IVyfoHDW4ucNQSfbg06suChxnxIe5cwgA5W_aDX4z_WIPg4PicrdYYJlUYP6dABQ/exec</string>
+    <string name="link_canoinhas">https://script.google.com/macros/s/AKfycbz-tlrcP4kx2K7X0Fsqv65nstn_FZ5BmrQIkg9TYXinJ93R2WRhZ3mYM3CPSR1neOYWSw/exec</string>
+    <string name="link_rionegro">https://script.google.com/macros/s/AKfycbzSWeyzZH7psGWHNT0vbCZtT23n2UhSSP8iHBLiO0ZlCsj3a91dkWT3i3LWVQNQp1egnw/exec</string>
+    <string name="link_uniao">https://script.google.com/macros/s/AKfycbwIqOHgR5aOTgUJzKF8e7qJlt5n3dmYN5SiS3m5nLMKU5rnEBqMHylyvjDcK3K9osVUKw/exec</string>
+</resources>

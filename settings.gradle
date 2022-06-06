@@ -1,0 +1,2 @@
+rootProject.name = "O Estoque"
+include ':app'
